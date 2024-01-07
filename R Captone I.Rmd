@@ -1,0 +1,470 @@
+---
+title: "Capstone I"
+author: "Francese"
+date: "2023-12-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import & Data
+
+```{r cars}
+read_csv("23_WCSU_aims.csv")
+aims_23 <- as.data.frame(read_csv("23_WCSU_aims.csv"), show_col_types = FALSE)
+```
+
+```{r}
+aims_23<- aims_23[-c(1:3,7,9:10)]
+aims_23
+```
+
+```{r}
+colnames(aims_23)[1]<-"SchoolName"
+
+aims_23$RiskStatus <- factor(aims_23$RiskStatus, levels = c("HIGH", "MODERATE", "LOW"))
+
+aims_23$Period <-factor(aims_23$Period, levels = c('Fall','Winter','Spring'))
+```
+
+## Recreating Tables from Python
+
+```{r}
+#battery_scores<- aims_23 %>%
+  #filter(IsBatteryScore == 1)
+battery_scores
+```
+
+```{r}
+spring_batteries <- battery_scores %>%
+  filter(Period == 'Spring')
+
+spring_batteries
+```
+
+```{r}
+skill_scores <- aims_23 %>%
+  filter(IsBatteryScore == 0)
+
+skill_scores_grade_1 <- skill_scores %>%
+  filter(StudentGrade == 1)
+skill_scores_grade_1 
+
+skill_scores_grade_1_bbe <- skill_scores_grade_1 %>%
+  filter(SchoolName == "Blue Bird Elementary School")
+
+unique(skill_scores_grade_1_bbe$MeasureName)
+unique(skill_scores_grade_1_bbe$RelatedForm)
+lit_skills_grade_1_bbe <- skill_scores_grade_1_bbe %>%
+  filter(RelatedForm == "LWSF" | RelatedForm == "ORF" |RelatedForm == "WRF" |
+           RelatedForm == "NWF"| RelatedForm == "PS"| RelatedForm ==  "AV" |
+           RelatedForm == "LNF"|RelatedForm == "IS"  )
+```
+
+```{r}
+high_risk <- battery_scores%>%
+  group_by(RiskStatus)%>%
+  summarise(
+    num_students= length(unique(Students)))
+
+high_risk
+```
+
+```{r}
+students_at_risk<-battery_scores%>%
+  group_by(MeasureName,RiskStatus)%>%
+  summarise(
+    num_students= length(unique(Students)), na.rm = TRUE)
+students_at_risk$percent_of_group<-round(students_at_risk$num_students/414, digits=2)
+
+arrange(students_at_risk, MeasureName, RiskStatus, desc(num_students))
+```
+
+```{r}
+students_at_high_risk<-battery_scores%>%
+  group_by(MeasureName,RiskStatus)%>%
+  summarise(
+    num_students= length(unique(Students)))%>%
+  filter(RiskStatus=="HIGH")
+
+students_at_high_risk$percent_of_group <- round(students_at_high_risk$num_students/414, digits=2)
+students_at_high_risk
+```
+
+```{r}
+high_risk_periods <-battery_scores%>%
+  group_by(Period,RiskStatus)%>%
+  summarise(
+    num_students= length(unique(Students)))%>%
+  filter(RiskStatus=="HIGH")
+
+high_risk_periods
+```
+
+```{r}
+tested_students_by_grade <- battery_scores%>%
+  group_by(StudentGrade) %>%
+  summarise(
+    num_students= length(unique(Students)))
+
+  
+  tested_students_by_school <-
+    battery_scores%>%
+  group_by(SchoolName) %>%
+  summarise(
+    num_students= length(unique(Students)))
+  
+  
+  tested_students_by_grade_school <-
+    battery_scores%>%
+  group_by(SchoolName, StudentGrade) %>%
+  summarise(
+    num_students= length(unique(Students)))
+  tested_students_by_grade_school
+```
+
+```{r}
+```
+
+```{r}
+grade_level_risk_spring <- battery_scores%>%
+  group_by(StudentGrade, Period, MeasureName, RiskStatus) %>%
+  summarise(
+    num_students= length(unique(Students)),
+.groups = "keep")%>%
+  filter(Period=="Spring", RiskStatus =="HIGH")
+
+grade_level_risk_spring
+```
+
+```{r}
+first_grade_lit_scores <- battery_scores %>%
+  group_by(Students) %>%
+  filter(Period =="Spring", StudentGrade==1, MeasureName=="Early Literacy")
+
+first_grade_lit_scores
+```
+
+## Merge Tables
+
+```{r echo=TRUE}
+spring_high_grade<- merge(grade_level_risk_spring, tested_students_by_grade, by = "StudentGrade")
+#spring_high_grade$num_high_risk <- spring_high_grade$num_students.x 
+#spring_high_grade$ttl_students_tested <- spring_high_grade$num_students.x 
+#spring_high_grade$percent_of_pop <- round(num_high_risk/ttl_students_tested, digits = 2)
+
+
+colnames(spring_high_grade)[5]<-"HighRiskStudents"
+colnames(spring_high_grade)[6]<-"TotalTested"
+
+spring_high_grade$percent_of_group <- round(spring_high_grade$HighRiskStudents/spring_high_grade$TotalTested, digits=2)
+spring_high_grade 
+```
+
+## Plotting Results
+
+```{r}
+my_theme <- theme_minimal() + theme(text = element_text(face = "bold", family = "sans"))
+dis_colors <- list(c("#9e3434","#fcbe03", "#54a157"))
+#scale_fill_manual(values=c("#9e3434", "#54a157","#fcbe03"))
+```
+
+```{r}
+sb<-spring_batteries  %>% 
+  ggplot(mapping = aes(y=Natl, x=StudentGrade, fill = MeasureName)) +
+  geom_boxplot() + scale_fill_brewer(palette = "BuBr")
+sb <- sb + labs(title = "Standardized Student Battery Scores", y = "Natl Percentile", x = "Student Grade Level") + 
+  theme (aspect.ratio = 1)  + my_theme
+
+sb
+```
+
+b \<- b+ facet_grid(row=vars(StudentGrade))
+
+```{r}
+b<-spring_batteries  %>% 
+  ggplot(mapping = aes(y=Natl, x=Dist, color= MeasureName),color="black") +
+  geom_jitter() + scale_fill_brewer(palette = "Dark2")
+b <- b + labs(title = "Standardized Student Battery Scores", y = "Natl Percentile", x = "Dist Percentile") + 
+  theme (aspect.ratio = 1)  + my_theme+ 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "italic"))
+
+
+b
+```
+
+```{r}
+
+ggplot (students_at_risk) +
+    geom_col(mapping = aes(x= MeasureName, fill= RiskStatus, y=num_students), color = "black") +
+  theme (aspect.ratio = 1) + scale_fill_manual(values=c("#9e3434","#fcbe03", "#54a157")) +
+  labs(x = NULL, y = NULL) + my_theme + labs(title = "Risk Levels of Students", x= "Assessment", y= "Students")
+```
+
+```{r}
+high_risk_periods$Period <-factor(high_risk_periods$Period, levels = c('Fall','Winter','Spring'))
+
+ggplot (high_risk_periods) +
+    geom_col(mapping = aes(x= Period, y=num_students, fill=Period), color = "black") +
+  theme (aspect.ratio = 1) + scale_fill_brewer(palette = "BrBG") +
+  labs(x = NULL, y = NULL) + my_theme + labs(title = "Risk Levels of Students by Period", x= "Period", y= "Students")
+```
+
+scale_fill_brewer(palette = "BrBG")
+
+```{r}
+#grade_level_risk_spring$StudentGrade <-factor(grade_level_risk_spring,levels = c(1,2,3,4,5,6,7,8))
+ glrs<-ggplot(grade_level_risk_spring) +
+  geom_col(aes(x=StudentGrade, y=num_students, fill=MeasureName), color="black") +
+  labs (x = "Assessment", y = "Count of High Risk Students", title = "Students Ranked 'High Risk' in Spring Time Assessments") + scale_fill_brewer(palette = "BrBG") +my_theme 
+glrs
+```
+
+```{r}
+
+ggplot(spring_high_grade, aes(x=StudentGrade, y=HighRiskStudents)) +
+  geom_col(aes(fill=MeasureName), color="black") +
+  labs (x = "Assessment", y = "Count of High Risk Students", title = "Students Ranked 'High Risk' in Spring Time Assessments") + scale_fill_brewer(palette = "BrBG") +my_theme + 
+  geom_point()+
+  geom_segment(aes(x=StudentGrade, xend=StudentGrade, y=0, yend=TotalTested), color="black")
+
+```
+
+```{r}
+spring_high_grade 
+
+geom_point(spring_high_grade)
+```
+
+```{r}
+school_1_lit = first_grade_lit_scores %>%
+  group_by(SchoolName, RiskStatus) %>%
+  summarise(row_count=n())
+
+school_1_lit$short_schoolname <- sapply(strsplit(school_1_lit$SchoolName, " "), `[`,1)
+school_1_lit <- school_1_lit %>%
+  group_by(short_schoolname) %>%
+  mutate(total = sum(row_count)) %>%
+  ungroup() %>%
+  mutate(percent = (row_count / total) * 100)
+school_1_lit
+```
+
+```{r}
+ggplot(school_1_lit, aes(x=short_schoolname, y=row_count, fill= RiskStatus)) +
+  geom_bar(stat="identity", color="black") + scale_fill_manual(values=c("#9e3434","#fcbe03", "#54a157")) + my_theme  + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "italic"))  +
+  labs (x = "School Name (abbr)", y = "Count of Students", title = "First Grader Risk Level in Spring Literacy Assessments") 
+
+```
+
+```{r}
+
+ggplot(school_1_lit, aes(x = short_schoolname, y = row_count, fill = RiskStatus)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_fill_manual(values = c("#9e3434", "#fcbe03", "#54a157")) +
+  geom_text(aes(label = paste0(round(percent, 1), "%")), 
+            position = position_stack(vjust = 0.5), size = 3, fontface="bold") +
+  my_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "italic")) +
+  labs(x = "School Name (abbr)", y = "Count of Students", 
+       title = "First Grader Risk Level in Spring Literacy Assessments")
+```
+
+```{r}
+school_1_lit_bbe_2 <-school_1_lit %>%
+  filter(SchoolName == "Blue Bird Elementary School")
+school_1_lit_bbe_2 
+```
+
+```{r}
+
+school_1_lit_bbe_2 <- battery_scores %>%
+  filter(SchoolName == "Blue Bird Elementary School", StudentGrade==1, RelatedForm == 'ELB')
+school_1_lit_bbe_2 %>%
+  ggplot(aes(y=percent, x=row_count, fill=RiskStatus)) +
+  geom_col(color="black") + scale_fill_manual(values=c("#9e3434","#fcbe03", "#54a157")) + my_theme  + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "italic"))   
+```
+
+```{r}
+lit_skills_grade_1_bbe_spring
+```
+
+```{r}
+#look at Blue Bird Elementary School skill scores
+library(ggridges)
+
+lit_skills_grade_1_bbe_spring<- lit_skills_grade_1_bbe %>%
+  filter(Period== "Spring")
+
+ggplot(lit_skills_grade_1_bbe_spring) +
+  geom_density_ridges(aes(x = Natl, y = MeasureName, fill = MeasureName), scale = 0.6) +
+  scale_fill_brewer(palette = "BrBG")  + my_theme +
+  labs(x = "Percentile", y = "Skill Measure Name", 
+       title = "Blue Bird Elementary Grade 1 Percentile Ranks") +
+  geom_density_ridges(aes(x=Dist, y=MeasureName, fill= MeasureName), scale = 0.6, alpha = 0.5) +
+  scale_fill_brewer(palette = "BrBG")  + my_theme
+
+
+```
+
+```{r}
+lit_skills_grade_1_by_stu <- lit_skills_grade_1_bbe_spring%>%
+  group_by(MeasureName) %>%
+  summarise(num_students= length(unique(Students)), avg_score = mean(Score),
+            avg_natl_per = mean(Natl), avg_dist_per = mean(Dist))
+lit_skills_grade_1_by_stu
+```
+
+```{r}
+lit_skills_grade_below_50 <- lit_skills_grade_1_bbe_spring%>%
+  filter(Natl <= 50 & Dist <= 50)
+lit_skills_grade_below_50
+```
+
+```{r}
+skill_scores_avg <- skill_scores %>%
+  group_by(Students, SchoolName, StudentGrade, Period, MeasureName, RelatedForm) %>%
+  summarize (avg_score = mean(Score),
+             row_count=n(),
+             avg_natl = mean(Natl),
+             avg_dist = mean (Dist)) %>%
+  filter(Period == "Spring")
+
+skill_scores_avg 
+  
+```
+
+```{r}
+first_grade_lit
+```
+
+```{r}
+unique(skill_scores$RelatedForm)
+```
+
+```{r}
+lit_skill_scores <- skill_scores%>%
+  filter(RelatedForm == "LWSF" | RelatedForm == "ORF" |RelatedForm == "WRF" |
+           RelatedForm == "NWF"| RelatedForm == "PS"| RelatedForm ==  "AV" |
+           RelatedForm == "LNF"|RelatedForm == "IS"| RelatedForm == "RC" |
+          RelatedForm == "SRF"| RelatedForm == "VOC"| RelatedForm == "PS" |
+           RelatedForm == "IS")
+```
+
+```{r}
+lit_skill_scores_avg = lit_skill_scores %>%
+  group_by(StudentGrade, MeasureName, Period) %>%
+  summarize (avg_score = mean(Score),
+             num_students = length(unique(Students)),
+             avg_natl = mean(Natl),
+             avg_dist = mean (Dist),.groups="keep") %>%
+  filter(Period == "Spring")
+lit_skill_scores_avg
+```
+
+```{r}
+unique(lit_skill_scores$SchoolName)
+
+lit_skill_scores_bbms<- lit_skill_scores %>%
+  filter(SchoolName == "Brown Bear Middle School")
+
+lit_skill_scores_wes<- lit_skill_scores %>%
+  filter(SchoolName == "Whipple Elementary School\n Elementary School")
+
+
+lit_skill_scores_bbe<- lit_skill_scores %>%
+  filter(SchoolName == "Blue Bird Elementary School")
+
+lit_skill_scores_wre<- lit_skill_scores %>%
+  filter(SchoolName == "White Rabbit Elementary School\n Elementary School")
+
+lit_skill_scores_dde<- lit_skill_scores %>%
+  filter(SchoolName == "Double Dog Elementary School")
+
+lit_skill_scores_grp <- lit_skill_scores %>%
+  group_by(SchoolName,StudentGrade, MeasureName, Period) %>%
+  summarise(num_students = length(unique(Students)),
+            avg_score = mean(Score),
+            avg_natl=mean(Natl)
+            )
+lit_skill_scores_grp
+
+cleaned_lit_skills <- na.omit(lit_skill_scores_grp)
+
+
+cleaned_lit_groupedskills<- cleaned_lit_skills %>%
+  group_by(SchoolName, StudentGrade, Period)%>%
+  summarise(num_students = sum(num_students),
+            avg_score = mean(avg_score),
+            avg_natl = mean(avg_natl))
+cleaned_lit_groupedskills
+```
+
+```{r}
+cleaned_lit_groupedskills$Period <- factor(cleaned_lit_groupedskills$Period, 
+                                           levels = c("Fall", "Winter", "Spring"))
+
+```
+
+```{r}
+
+cleaned_lit_groupedskills %>%
+  ggplot(aes(x = Period, y = avg_natl, color = SchoolName)) +
+  geom_point() +
+  geom_line() +
+  my_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "italic")) +
+  theme(text = element_text(size = 9), element_line(size =1)) +
+  labs(y = "National Percentile", x = "Student Grade", title = "Spring Literacy Skills")
+
+```
+
+```{r}
+cleaned_lit_groupedskills %>%
+  ggplot(aes(y = Period, x = avg_natl, group = SchoolName, color = SchoolName)) +
+  geom_point() +
+  geom_line() +
+  my_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "italic")) +
+  theme(text = element_text(size = 9), element_line(size = 1)) +
+  labs(y = "National Percentile", x = "Student Grade", title = "Literacy Skills")
+
+```
+
+```{r}
+tested_students_by_school$ShortSchoolName <- sapply(strsplit(tested_students_by_school$SchoolName, " "), function(x) paste(x[1:min(length(x), 2)], collapse = " "))
+
+tss <- ggplot(tested_students_by_school, aes(x = ShortSchoolName, y = num_students, fill = SchoolName)) +
+  geom_col(color="black") +
+  scale_fill_brewer(palette = "BrBu") +  my_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "italic")) +
+  labs(x = "School Name", y = "Count of Students", 
+       title = "Students Tested SY 2023")
+
+tss
+
+```
+
+```{r}
+
+tested_students_by_grade_school$ShortSchoolName <- sapply(strsplit(tested_students_by_grade_school$SchoolName, " "), function(x) paste(x[1:min(length(x), 2)], collapse = " "))
+
+
+
+tsg <- ggplot(tested_students_by_grade, aes(x= StudentGrade, y = num_students, fill = StudentGrade)) +
+  geom_col(color="black") +
+  scale_fill_brewer(palette = "Dark2") +  my_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "italic")) +
+  labs(x = "School Name", y = "Count of Students", 
+       title = "Students Tested SY 2023")
+
+tsg
+```
+
+```{r}
+tested_students_
+```
